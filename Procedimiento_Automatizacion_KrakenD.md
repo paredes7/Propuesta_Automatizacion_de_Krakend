@@ -6,7 +6,7 @@
 
 | Fecha | Versión | Descripción | Autor |
 |:---|:---|:---|:---|
-| 15-oct-2026 | 1.0 | Versión inicial | José Gael Choque Serrano |
+| 15-oct-2026 | 1.0 | Versión inicial | simon, jhoel |
 
 ---
 
