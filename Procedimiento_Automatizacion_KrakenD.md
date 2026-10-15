@@ -43,8 +43,6 @@ Automatizar el registro de endpoints en el API Gateway KrakenD mediante un scrip
 | # | Requisito | Detalle |
 |:---|:---|:---|
 | 1 | Acceso a Jenkins | Validar acceso a la herramienta: [https://jenkins1.tigo.net.bo/](https://jenkins1.tigo.net.bo/) |
-| 2 | Docker | Instalado en el servidor de despliegue, con el contenedor `krakend-gateway` corriendo la imagen oficial `krakend/krakend-ce`. |
-| 3 | Python 3.6+ | Disponible en el agente de Jenkins para ejecutar el script de merge (`merge-endpoint.py`). |
 | 4 | Archivo maestro `krakend.json` | Centralizado en una ruta accesible por el pipeline (ej: `/etc/krakend/krakend.json` o en un repositorio Git dedicado). |
 | 5 | Credenciales Git | Configuradas en Jenkins (SSH key o token) con permisos de lectura/escritura sobre el repositorio de configuración de KrakenD. |
 | 6 | Convención de nombre | Cada microservicio debe incluir en su repositorio un archivo llamado `krakend-endpoints.json` con la definición de su(s) endpoint(s) en el formato estándar de KrakenD. |
@@ -69,7 +67,6 @@ Automatizar el registro de endpoints en el API Gateway KrakenD mediante un scrip
 
 ### 4.1 Paso 1: Creación del archivo de endpoint por el desarrollador
 
-> [!IMPORTANT]
 > El desarrollador es responsable de crear un archivo `krakend-endpoints.json` en la raíz de su repositorio del microservicio. Este archivo debe contener **únicamente** la definición del endpoint que su servicio expone, **NO** la configuración completa de KrakenD.
 
 #### 4.1.1 Estructura del archivo
@@ -234,89 +231,9 @@ curl -s http://localhost:8080/api/v1/products | head -20
 
 El endpoint debe responder con datos del microservicio o con `401 Unauthorized` si requiere token JWT (lo cual confirma que KrakenD lo tiene registrado y está validando la autenticación).
 
----
-
-## 5. Script de automatización (merge-endpoint.py)
-
-> [!NOTE]
-> Este script es el componente central de la automatización. Lee el endpoint del desarrollador y lo inserta en el archivo maestro `krakend.json`.
-
-```python
-#!/usr/bin/env python3
-"""
-Script para insertar automáticamente un endpoint nuevo
-en el archivo maestro krakend.json del API Gateway KrakenD.
-
-Uso:
-    python3 merge-endpoint.py <ruta_krakend_maestro> <ruta_endpoint_nuevo>
-
-Ejemplo:
-    python3 merge-endpoint.py /etc/krakend/krakend.json ./krakend-endpoints.json
-"""
-import json
-import sys
-import shutil
-from datetime import datetime
-
-
-def backup_master(master_path):
-    """Crea una copia de seguridad del archivo maestro antes de modificarlo."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_path = f"{master_path}.backup_{timestamp}"
-    shutil.copy2(master_path, backup_path)
-    print(f"📦 Backup creado: {backup_path}")
-    return backup_path
-
-
-def merge_endpoint(master_path, new_endpoint_path):
-    """Lee el endpoint nuevo y lo inserta en el archivo maestro de KrakenD."""
-
-    # 1. Crear backup del archivo maestro
-    backup_master(master_path)
-
-    # 2. Leer el archivo maestro de KrakenD
-    with open(master_path, 'r', encoding='utf-8') as f:
-        krakend_config = json.load(f)
-
-    # 3. Leer el endpoint nuevo del desarrollador
-    with open(new_endpoint_path, 'r', encoding='utf-8') as f:
-        new_endpoint = json.load(f)
-
-    # 4. Verificar que no exista ya (evitar duplicados)
-    for i, existing in enumerate(krakend_config['endpoints']):
-        if (existing['endpoint'] == new_endpoint['endpoint']
-                and existing.get('method', 'GET') == new_endpoint.get('method', 'GET')):
-            print(f"⚠️  Endpoint {new_endpoint['endpoint']} [{new_endpoint.get('method', 'GET')}] ya existe. Actualizando...")
-            krakend_config['endpoints'][i] = new_endpoint
-            break
-    else:
-        # 5. Si no existe, insertar el nuevo endpoint
-        krakend_config['endpoints'].append(new_endpoint)
-        print(f"✅ Endpoint {new_endpoint['endpoint']} [{new_endpoint.get('method', 'GET')}] agregado.")
-
-    # 6. Guardar el archivo maestro actualizado
-    with open(master_path, 'w', encoding='utf-8') as f:
-        json.dump(krakend_config, f, indent=2, ensure_ascii=False)
-
-    print(f"✅ Archivo {master_path} actualizado correctamente.")
-    print(f"📊 Total de endpoints registrados: {len(krakend_config['endpoints'])}")
-
-
-if __name__ == '__main__':
-    if len(sys.argv) != 3:
-        print("Uso: python3 merge-endpoint.py <krakend_maestro.json> <endpoint_nuevo.json>")
-        sys.exit(1)
-
-    master = sys.argv[1]
-    new_ep = sys.argv[2]
-    merge_endpoint(master, new_ep)
-```
-
----
 
 ## 6. Etapa en Jenkinsfile
 
-> [!IMPORTANT]
 > El siguiente bloque debe agregarse al `Jenkinsfile` del microservicio, después de la etapa de despliegue a QA.
 
 ```groovy
@@ -328,7 +245,7 @@ stage('Registrar Endpoint en KrakenD') {
             // 1. Verificar que el archivo de endpoints existe
             sh '''
                 if [ ! -f krakend-endpoints.json ]; then
-                    echo "⚠️ No se encontró krakend-endpoints.json. Omitiendo registro en KrakenD."
+                    echo "No se encontró krakend-endpoints.json. Omitiendo registro en KrakenD."
                     exit 0
                 fi
             '''
@@ -346,7 +263,7 @@ stage('Registrar Endpoint en KrakenD') {
             // 4. Reiniciar KrakenD para aplicar la nueva configuración
             sh 'docker restart krakend-gateway'
 
-            echo '✅ Endpoint registrado y KrakenD reiniciado exitosamente.'
+            echo 'Endpoint registrado y KrakenD reiniciado exitosamente.'
         }
     }
 }
